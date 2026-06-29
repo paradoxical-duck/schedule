@@ -7,6 +7,7 @@ import os
 import json
 import shutil
 import uuid
+from collections import Counter
 
 OPTION_ALIASES = {
     "-chat": "chat",
@@ -243,6 +244,59 @@ def resolve_chat(chat):
         f"Recent chats:\n{recent_text}"
     )
 
+def find_session_files(session_id):
+    sessions_dir = os.path.join(codex_home(), "sessions")
+    if not os.path.isdir(sessions_dir):
+        return []
+
+    matches = []
+    needle = f"{session_id}.jsonl"
+    for root, _dirs, files in os.walk(sessions_dir):
+        for name in files:
+            if name.endswith(needle):
+                matches.append(os.path.join(root, name))
+
+    return matches
+
+def get_thread_cwd(session_id):
+    home = os.path.normcase(os.path.normpath(os.path.expanduser("~")))
+    cwd_counts = Counter()
+    latest_cwd = None
+
+    for path in find_session_files(session_id):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if event.get("type") != "turn_context":
+                        continue
+
+                    cwd = event.get("payload", {}).get("cwd")
+                    if not cwd or not os.path.isdir(cwd):
+                        continue
+
+                    latest_cwd = cwd
+                    cwd_counts[cwd] += 1
+        except OSError:
+            continue
+
+    if not cwd_counts:
+        return None
+
+    non_home = {
+        cwd: count for cwd, count in cwd_counts.items()
+        if os.path.normcase(os.path.normpath(cwd)) != home
+    }
+
+    if non_home:
+        return max(non_home.items(), key=lambda item: item[1])[0]
+
+    return latest_cwd
+
 def build_codex_command(chat, prompt):
     codex = shutil.which("codex") or shutil.which("codex.cmd")
     if not codex:
@@ -251,6 +305,10 @@ def build_codex_command(chat, prompt):
     if chat:
         session_id, matched_name = resolve_chat(chat)
         print(f"[Schedule] Target chat: {matched_name} ({session_id})")
+        cwd = get_thread_cwd(session_id)
+        if cwd:
+            print(f"[Schedule] Target cwd: {cwd}")
+            return [codex, "exec", "-C", cwd, "resume", session_id, prompt]
         return [codex, "exec", "resume", session_id, prompt]
 
     return [codex, "exec", prompt]

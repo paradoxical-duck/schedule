@@ -73,6 +73,8 @@ Matching rules:
 
 When multiple index entries share the same chat name, `schedule` uses the most recently updated one.
 
+When a session file contains prior turn context, `schedule` also reuses the thread's recorded working directory with `codex exec -C <cwd> resume ...`. This keeps scheduled project work from accidentally running in whatever directory your terminal was in.
+
 ## Rate Limit Behavior
 
 `schedule` first sends the prompt immediately.
