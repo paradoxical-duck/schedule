@@ -83,6 +83,15 @@ def wait_countdown(seconds):
     sys.stdout.write("\r[Schedule] Retrying now...                                   \n")
     sys.stdout.flush()
 
+def print_non_rate_limit_hint(output_text):
+    lowered = output_text.lower()
+    if "does not start with session metadata" in lowered or "thread-store internal error" in lowered:
+        print(
+            "[Schedule] This usually means your terminal Codex CLI is older than the "
+            "Codex app that created the target chat. Run `codex update`, restart "
+            "Codex, then retry the schedule command."
+        )
+
 def parse_args(args):
     if not args:
         raise ValueError(USAGE)
@@ -358,6 +367,7 @@ def main():
             if wait_seconds is not None:
                 wait_countdown(wait_seconds)
             else:
+                print_non_rate_limit_hint(output_text)
                 print(f"[Schedule] Codex exited with error code {process.returncode} but no rate limit was detected. Exiting.")
                 sys.exit(process.returncode)
 
