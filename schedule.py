@@ -29,6 +29,12 @@ USAGE = """Usage:
   schedule -Chat "chat name" -Plan "plan prompt here"
 """
 
+def configure_console_output():
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure:
+            reconfigure(errors="backslashreplace")
+
 def get_wait_time(output_text):
     # Pattern for "try again at 3:17 PM" or "try again at 15:17"
     m = re.search(r'try again at\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?', output_text, re.IGNORECASE)
@@ -323,6 +329,7 @@ def build_codex_command(chat, prompt):
     return [codex, "exec", prompt]
 
 def main():
+    configure_console_output()
     args = sys.argv[1:]
     try:
         chat, prompt = parse_args(args)
@@ -346,6 +353,8 @@ def main():
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="backslashreplace",
             bufsize=1,
             shell=False
         )
