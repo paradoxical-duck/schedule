@@ -1,15 +1,20 @@
 # schedule
 
-`schedule` is a tiny Windows-friendly terminal command for sending a prompt to Codex now, or automatically retrying after a Codex rate limit clears.
+> **Claude Code variant.** This is a port of `schedule` that drives the
+> [Claude Code](https://claude.com/claude-code) CLI (`claude`) instead of the
+> Codex CLI. It shells out to `claude -p` and resumes Claude sessions rather
+> than Codex chats.
 
-It can send to a new non-interactive Codex exec session, or resume an existing Codex chat by chat name.
+`schedule` is a tiny Windows-friendly terminal command for sending a prompt to Claude Code now, or automatically retrying after a Claude usage/rate limit clears.
+
+It can send to a new non-interactive Claude session, or resume an existing Claude chat by chat name.
 
 ## Install
 
 Requirements:
 
 - Python on `PATH`
-- Codex CLI on `PATH`
+- Claude Code CLI (`claude`) on `PATH`
 - PowerShell on Windows
 
 Clone the repo, then run:
@@ -34,7 +39,7 @@ Send a normal prompt:
 schedule -Prompt "Summarize the current repo"
 ```
 
-Send to an existing Codex chat by name:
+Send to an existing Claude chat by name:
 
 ```powershell
 schedule -Chat "chat name" -Prompt "prompt"
@@ -60,9 +65,42 @@ schedule goal "goal prompt"
 schedule plan "plan prompt"
 ```
 
+## Viewing Recent Chats
+
+List your recent Claude project chats, most recently updated first:
+
+```powershell
+schedule -Chats
+```
+
+By default it shows the 20 most recent chats. Pass a number to change how many,
+or pass text to filter by chat name:
+
+```powershell
+schedule -Chats 5          # show the 5 most recent chats
+schedule -Chats AFK        # show chats whose name contains "AFK"
+```
+
+Each entry lists the chat title, its session id, when it was last updated, and
+the directory it ran in — so you can copy a name or id straight into
+`schedule -Chat`:
+
+```text
+[Schedule] Recent Claude chats (showing 5 of 42)
+
+  Dashboard redesign
+    id:      9f1c1e0a-3b7d-4a2e-8f10-1c2b3d4e5f60
+    updated: 2026-07-01 15:51
+    cwd:     D:\Projects\dashboard
+```
+
 ## Chat Matching
 
-`schedule -Chat` reads Codex's local `session_index.jsonl` from `CODEX_HOME`, or from `~\.codex` if `CODEX_HOME` is not set.
+`schedule -Chat` scans Claude's local session store under
+`%USERPROFILE%\.claude\projects` (or `CLAUDE_CONFIG_DIR\projects` when
+`CLAUDE_CONFIG_DIR` is set). Each conversation is a `<session-id>.jsonl` file;
+`schedule` reads the auto-generated chat title (or falls back to the first user
+message) to match against the name you pass.
 
 Matching rules:
 
@@ -71,26 +109,33 @@ Matching rules:
 3. If there is one unique partial match, that chat is used.
 4. Ambiguous or missing names fail before sending, with suggestions.
 
-When multiple index entries share the same chat name, `schedule` uses the most recently updated one.
+When multiple sessions share the same chat name, `schedule` uses the most
+recently updated one.
 
-When a session file contains prior turn context, `schedule` also reuses the thread's recorded working directory with `codex exec -C <cwd> resume ...`. This keeps scheduled project work from accidentally running in whatever directory your terminal was in.
+Each session records the working directory it ran in. `schedule` reuses that
+directory when resuming (`claude -p --resume <session-id>` launched from the
+recorded cwd), so scheduled project work runs in the right place regardless of
+where your terminal happens to be.
 
 ## Rate Limit Behavior
 
 `schedule` first sends the prompt immediately.
 
-If Codex succeeds, it prints:
+If Claude succeeds, it prints:
 
 ```text
-[Schedule] Prompt sent right now because Codex did not report a rate limit.
+[Schedule] Prompt sent right now because Claude did not report a rate limit.
 ```
 
-If Codex reports a rate limit, `schedule` parses retry text such as:
+If Claude reports a usage/rate limit, `schedule` parses retry text such as:
 
-- `try again at 3:17 PM`
+- `resets at 3:17 PM`
+- `try again at 15:17`
+- `resets 3pm`
 - `try again in 2 minutes`
 - `try again in 30 seconds`
 - `try again in 1 hour`
+- a unix epoch, e.g. `limit reached|1735750800`
 
 It waits with a countdown, then retries the same command automatically.
 
@@ -107,11 +152,11 @@ schedule -Chat "Dashboard redesign" -Plan "Plan the next UI polish pass."
 This is intentionally small. It shells out to:
 
 ```text
-codex exec <prompt>
+claude -p <prompt>
 ```
 
 or, when `-Chat` is provided:
 
 ```text
-codex exec resume <session-id> <prompt>
+claude -p --resume <session-id> <prompt>
 ```
